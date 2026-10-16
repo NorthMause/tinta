@@ -6,6 +6,7 @@
 
 #include "export.h"
 #include "d2d_init.h"
+#include <functional>
 #include <set>
 
 #include "editor.h"
@@ -810,6 +811,14 @@ void walkInline(DocxCtx& ctx, const ElementPtr& elem, RunProps props,
             }
             break;
         }
+        case ElementType::Underline: {
+            RunProps under = props;
+            under.underline = true;
+            for (const auto& child : elem->children) {
+                walkInline(ctx, child, under, out);
+            }
+            break;
+        }
         case ElementType::Superscript: {
             RunProps sup = props;
             sup.superScript = true;
@@ -887,10 +896,13 @@ void walkInline(DocxCtx& ctx, const ElementPtr& elem, RunProps props,
                 }
             }
             // Unsupported or remote: alt text plus the address as a link
+            // Nested spans (<sub>, emphasis) in the alt text keep their words
             std::string alt;
-            for (const auto& child : elem->children) {
-                if (child->type == ElementType::Text) alt += child->text;
-            }
+            std::function<void(const ElementPtr&)> gather = [&](const ElementPtr& e) {
+                if (e->type == ElementType::Text) alt += e->text;
+                for (const auto& child : e->children) gather(child);
+            };
+            for (const auto& child : elem->children) gather(child);
             RunProps altProps = props;
             altProps.italic = true;
             emitTextRun(ctx, alt.empty() ? elem->url : alt + " (" +
