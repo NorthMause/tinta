@@ -2320,6 +2320,10 @@ static void layoutCodeBlock(App& app, const ElementPtr& elem, float& y, float in
                 const uint64_t key = plantuml::cacheKey(
                     code, preambleText, toolPath,
                     plantuml::toolStampFor(toolPath), 0 /*png*/);
+                // The fit ordinal is taken whether or not the image has
+                // arrived yet: a diagram still rendering must not shift
+                // the fit state of the diagrams after it
+                const unsigned fitKey = 0x80000000u | app.layoutDiagramSeq++;
                 // Adopt finished renders on this (owner) thread before
                 // deciding: a relayout may run before the posted
                 // WM_APP_PLANTUML_READY is dispatched, and drainFinished()
@@ -2338,8 +2342,6 @@ static void layoutCodeBlock(App& app, const ElementPtr& elem, float& y, float in
                     auto& image = getOrLoadImage(app, wideToUtf8(pngPath));
                     if (image.failed || !image.bitmap) return false;
                     const float scale = app.contentScale * app.zoomFactor;
-                    const unsigned fitKey =
-                        0x80000000u | app.layoutDiagramSeq++;
                     const bool fitActive = fitBlockEnabled(app, fitKey);
                     const float renderedW = (float)image.width * scale;
                     const float renderedH = (float)image.height * scale;

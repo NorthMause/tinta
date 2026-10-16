@@ -2560,7 +2560,10 @@ void settingsChip(App& app, float& x, float y, const wchar_t* label, bool active
 
 D2D1_RECT_F settingsPanelRect(const App& app) {
     float w = std::min(dpi(app, app.settingsSection == 3 ? 980.0f : 760.0f), app.width - dpi(app, app.settingsSection == 3 ? 32.0f : 80.0f));
-    float h = std::min(dpi(app, app.settingsSection == 3 ? 650.0f : 540.0f), app.height - dpi(app, 64.0f));
+    // Editor holds seven rows since PlantUML joined Pandoc: taller, so the
+    // last one stays clear of the footer
+    const float tall = app.settingsSection == 3 ? 650.0f : app.settingsSection == 2 ? 590.0f : 540.0f;
+    float h = std::min(dpi(app, tall), app.height - dpi(app, 64.0f));
     float x = (app.width - w) / 2;
     float y = (app.height - h) / 2 + (1 - app.settingsAnimation) * dpi(app, 30.0f);
     return D2D1::RectF(x, y, x + w, y + h);
@@ -2725,17 +2728,18 @@ void renderSettingsOverlay(App& app) {
                          float reserveRight = 0.0f) {
         D2D1_COLOR_F tc = app.theme.text; tc.a = 0.95f * anim;
         app.brush->SetColor(tc);
+        // Clipped: a long tool path stops short of the chips on the right
         app.renderTarget->DrawText(label, (UINT32)wcslen(label), fmt,
             D2D1::RectF(cx + cardPad, cy + dpi(app, 10.0f),
                         cx + cw - cardPad - reserveRight, cy + dpi(app, 28.0f)),
-            app.brush);
+            app.brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         if (hint) {
             tc.a = 0.5f * anim;
             app.brush->SetColor(tc);
             app.renderTarget->DrawText(hint, (UINT32)wcslen(hint), fmt,
                 D2D1::RectF(cx + cardPad, cy + dpi(app, 28.0f),
                             cx + cw - cardPad - reserveRight, cy + dpi(app, 46.0f)),
-                app.brush);
+                app.brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         }
     };
     // Right-aligned chip rows: total advance width of settingsChip calls

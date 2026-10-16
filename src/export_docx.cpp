@@ -36,6 +36,10 @@
 
 using namespace qmd;
 
+// Shared with the clipboard copy below the anonymous namespace
+bool plantumlOpaquePixels(App& app, const std::wstring& pngPath, UINT scale,
+                          std::vector<BYTE>& pixels, UINT& outW, UINT& outH);
+
 namespace {
 
 // --------------------------------------------------------------------------
@@ -1114,6 +1118,20 @@ bool emitPlantumlImage(DocxCtx& ctx, const std::string& source,
         !imageDimensions(png, width, height)) {
         return false;
     }
+    // On the theme's own background, as the mermaid diagrams are: a dark
+    // theme's light labels must not land on Word's white page
+    std::vector<BYTE> pixels;
+    UINT opaqueW = 0, opaqueH = 0;
+    if (plantumlOpaquePixels(app, pngPath, 1, pixels, opaqueW, opaqueH)) {
+        IWICBitmap* bitmap = nullptr;
+        if (SUCCEEDED(app.wicFactory->CreateBitmapFromMemory(
+                opaqueW, opaqueH, GUID_WICPixelFormat32bppPBGRA, opaqueW * 4,
+                static_cast<UINT>(pixels.size()), pixels.data(), &bitmap))) {
+            std::string opaque = encodeWicPng(app, bitmap, opaqueW, opaqueH);
+            if (!opaque.empty()) png = std::move(opaque);
+            bitmap->Release();
+        }
+    }
     const int rel = addImageRel(ctx, "png", png);
     long long cx, cy;
     // PlantUML renders at 1x, so the PNG's pixel size is its natural size
@@ -1788,20 +1806,20 @@ bool copyDiagramImage(App& app, HWND hwnd, const std::string& sourceUtf8) {
     return ok;
 }
 
-// Puts a rendered PlantUML PNG on the clipboard at 2x, mirroring the
-// mermaid Image button (CF_DIB plus a "PNG" stream). PlantUML renders on
-// a transparent background, so the scaled pixels are composited over the
-// active theme background before the DIB is built (CF_DIB consumers
-// ignore the alpha byte). Failure is silent: the caller shows no toast.
-bool copyPlantumlImageToClipboard(App& app, const std::wstring& pngPath) {
-    if (!app.wicFactory || pngPath.empty()) return false;
+// A rendered PlantUML PNG decoded at `scale` and composited over the
+// active theme background, made opaque: PlantUML draws on a transparent
+// page, which would leave a dark theme's light labels on white paper in
+// Word, and CF_DIB consumers ignore alpha. Premultiplied BGRA rows.
+bool plantumlOpaquePixels(App& app, const std::wstring& pngPath, UINT scale,
+                          std::vector<BYTE>& pixels, UINT& outW, UINT& outH) {
+    pixels.clear();
+    outW = outH = 0;
+    if (!app.wicFactory || pngPath.empty() || scale == 0) return false;
 
     IWICBitmapDecoder* decoder = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
     IWICFormatConverter* converter = nullptr;
     IWICBitmapScaler* scaler = nullptr;
-    UINT outW = 0, outH = 0;
-    std::vector<BYTE> pixels;
 
     if (SUCCEEDED(app.wicFactory->CreateDecoderFromFilename(
             pngPath.c_str(), nullptr, GENERIC_READ,
@@ -1816,10 +1834,10 @@ bool copyPlantumlImageToClipboard(App& app, const std::wstring& pngPath) {
                 WICBitmapDitherTypeNone, nullptr, 0.0,
                 WICBitmapPaletteTypeCustom)) &&
             SUCCEEDED(app.wicFactory->CreateBitmapScaler(&scaler)) &&
-            SUCCEEDED(scaler->Initialize(converter, w * 2, h * 2,
+            SUCCEEDED(scaler->Initialize(converter, w * scale, h * scale,
                                          WICBitmapInterpolationModeFant))) {
-            outW = w * 2;
-            outH = h * 2;
+            outW = w * scale;
+            outH = h * scale;
             const UINT stride = outW * 4;
             pixels.resize((size_t)stride * outH);
             if (SUCCEEDED(scaler->CopyPixels(nullptr, stride,
@@ -1849,7 +1867,17 @@ bool copyPlantumlImageToClipboard(App& app, const std::wstring& pngPath) {
     if (converter) converter->Release();
     if (frame) frame->Release();
     if (decoder) decoder->Release();
-    if (pixels.empty()) return false;
+    return !pixels.empty();
+}
+
+// Puts a rendered PlantUML PNG on the clipboard at 2x, mirroring the
+// mermaid Image button (CF_DIB plus a "PNG" stream), composited over the
+// theme background (plantumlOpaquePixels). Failure is silent: the caller
+// shows no toast.
+bool copyPlantumlImageToClipboard(App& app, const std::wstring& pngPath) {
+    UINT outW = 0, outH = 0;
+    std::vector<BYTE> pixels;
+    if (!plantumlOpaquePixels(app, pngPath, 2, pixels, outW, outH)) return false;
 
     // CF_DIB: header plus bottom-up 32bpp rows
     const UINT stride = outW * 4;
