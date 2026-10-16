@@ -1,5 +1,19 @@
 # Changelog
 
+## [v3.8.1] - 2026-10-16
+
+### Added
+- PlantUML diagrams: `plantuml` fences (also `puml` and `pu`) and standalone `.puml` and `.plantuml` files render through a PlantUML you already have, a `plantuml.exe` or a `plantuml.jar` run with Java, chosen in Settings → Editor. Diagrams follow the theme in the preview, print and the HTML and Word exports. PlantUML always runs in its sandbox, so a diagram cannot read files or reach the network. Contributed by @ArcSalazar (#248)
+- HTML `<sub>`, `<sup>` and `<ins>`, plus `<u>`, `<del>`, `<s>` and `<mark>`, render in paragraphs, headings, lists, tables, quotes and HTML blocks, and stay in the HTML and Word exports; `~~` and `==` pair across them. Suggested by @Ragos81 (#263)
+- The theme editor chooses the text, heading and code fonts with a Text / Headings / Code switch above its font list, and `themes.ini` always lists `headingfont=`. Requested by @go4399 (#256)
+
+### Fixed
+- Inline code sits on the baseline of the text beside it with any body and code font, including Chinese text, tables and headings. Reported by @go4399 and @tigerhawkvok (#259, #262)
+- Bold and italic words in a heading keep the heading's size, and superscripts and subscripts in a heading scale with it (#259, #263)
+- With word wrap on, stepping through the editor's search matches keeps the current match on screen. Reported by @derek-price (#260)
+- Word export sets Chinese text in the theme's font in Chinese Word too, instead of DengXian. Reported by @go4399 (#256)
+- HTML blocks keep the space beside inline tags such as `<b>` and `<a>` instead of joining the words (#263)
+
 ## [v3.8.0] - 2026-10-10
 
 ### Added
