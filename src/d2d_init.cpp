@@ -321,6 +321,8 @@ void updateTextFormats(App& app) {
     app.clearEditorLineLayoutCache();
     // Math boxes were laid out against the old theme font
     mathClearCache();
+    // Baselines measured per format: a new format may reuse a freed address
+    app.formatBaselines.clear();
     // Release existing formats
     if (app.textFormat) { app.textFormat->Release(); app.textFormat = nullptr; }
     if (app.headingFormat) { app.headingFormat->Release(); app.headingFormat = nullptr; }
@@ -333,6 +335,9 @@ void updateTextFormats(App& app) {
     if (app.codeBoldItalicFormat) { app.codeBoldItalicFormat->Release(); app.codeBoldItalicFormat = nullptr; }
     if (app.supSubFormat) { app.supSubFormat->Release(); app.supSubFormat = nullptr; }
     for (auto& fmt : app.headingFormats) {
+        if (fmt) { fmt->Release(); fmt = nullptr; }
+    }
+    for (auto& fmt : app.headingItalicFormats) {
         if (fmt) { fmt->Release(); fmt = nullptr; }
     }
 
@@ -397,6 +402,9 @@ void updateTextFormats(App& app) {
         app.dwriteFactory->CreateTextFormat(headingFont, nullptr,
             DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             headingSizes[i] * scale, L"en-us", &app.headingFormats[i]);
+        app.dwriteFactory->CreateTextFormat(headingFont, nullptr,
+            DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STRETCH_NORMAL,
+            headingSizes[i] * scale, L"en-us", &app.headingItalicFormats[i]);
     }
 
     // Set consistent baseline alignment for all formats
@@ -411,6 +419,9 @@ void updateTextFormats(App& app) {
     if (app.codeBoldItalicFormat) app.codeBoldItalicFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     if (app.supSubFormat) app.supSubFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     for (auto* fmt : app.headingFormats) {
+        if (fmt) fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    }
+    for (auto* fmt : app.headingItalicFormats) {
         if (fmt) fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     }
 
