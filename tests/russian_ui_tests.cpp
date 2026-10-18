@@ -30,6 +30,7 @@ int main() {
     app.hwnd = CreateWindowExW(0, L"STATIC", L"Russian UI tests", WS_POPUP,
         0, 0, 1050, 900, nullptr, nullptr, nullptr, nullptr);
     if (!app.hwnd || !initD2D(app) || !createRenderTarget(app)) return 1;
+    applyTheme(app, app.currentThemeIndex);
     check(openDocumentInViewer(app, fs::path(TINTA_RUSSIAN_UI_FIXTURE).wstring()),
           "mixed Russian fixture opens in the real viewer");
     app.width = 1050;

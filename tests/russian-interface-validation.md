@@ -25,7 +25,7 @@ Settings sections have enough height to keep the last card above the footer.
   `russian_ui_tests` target verify this branch independently of retention.
 - `python tests/check_russian_translations.py` verified exact coverage of
   English keys, nonempty values, uniqueness and matching printf arguments.
-- Five CTest checks: `i18n`, `russian_interface`, `ui_font_language`,
+- Five CTest checks passed on the standalone branch: `i18n`, `russian_interface`, `ui_font_language`,
   `input_shortcuts`, `editor_features`.
 - Native mouse input selected Russian from the language dropdown. Its
   stable ID round-tripped through settings.ini. Russian uses the normal
