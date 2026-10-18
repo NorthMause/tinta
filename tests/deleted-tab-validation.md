@@ -1,0 +1,41 @@
+# Deleted file tabs
+
+The General setting "Keep deleted files in memory" is off by default and
+warns "Increases RAM usage; until Tinta closes". Its choice persists in
+settings.ini as keepDeletedTabs. Enabling snapshots already open files;
+disabling immediately releases all per-tab viewer source copies.
+
+When enabled, tabs retain their last readable source in memory only. A missing original
+can still be selected, edited, saved to recreate it, or saved under a new
+name. Existing disk files take precedence on tab activation. Empty files
+have a valid empty snapshot. Closing a tab or exiting the process releases
+its source copy. No persistent viewer cache is written or read. The existing
+session restore continues to skip missing files on the next launch.
+Existing unsaved editor draft recovery is unchanged.
+
+Fixture: `tests/fixtures/deleted-tab.md`, a mixed document with Cyrillic,
+headings, a table, lists, emphasis, a quote, a link and code.
+
+## Verification
+
+- Built `tinta` and `input_tests` with Visual Studio 2026, MSVC x64 Release.
+- Seven CTest checks passed: `deleted_tab`, `editor_features`, `input_shortcuts`,
+  `file_fragment_navigation`, `tab_drop_position`, `tab_hover_card`,
+  `search_results_panel`.
+- The native deleted-tab test covers deletion while active, switching,
+  editing, discarding edits, parked editor recovery, saving to recreate the
+  original, externally recreated files, deleted empty files, inactive
+  session-seeded tabs, failed opens, releasing cached state on close, and
+  the absence of a recovery copy after all in-memory tabs are discarded.
+- It verifies that no `tab-cache/` directory is created.
+- Native settings mouse input verifies enabling, disabling, immediate
+  memory release, persistence of both values, and disabled-file behavior.
+- Settings previews were rendered through a GDI-compatible Direct2D target
+  and visually inspected in light/dark themes at widths 650 and 1050.
+  The switch and full RAM warning fit inside the panel. PNGs live at
+  `build/deleted-tab-memory-test-Release/settings-THEME-WIDTH.png`.
+- Cached content is laid out at widths 500 and 1000 with themes 0 and 5.
+  The native print harness produces `build/deleted-tab-memory-test-Release/cached-pages/page-1.png`.
+
+The Save As file picker was not driven through the UI. Files already
+deleted before this version first read them cannot be recovered.

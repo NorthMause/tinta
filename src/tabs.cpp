@@ -24,12 +24,29 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <shellapi.h>
 
 namespace {
 
 constexpr int TIMER_FILE_WATCH_ID = 1;
 constexpr int TIMER_EDITOR_REPARSE_ID = 2;  // matches editor.cpp
+
+std::optional<std::string> readViewerSource(const std::string& path) {
+    if (path.empty()) return std::nullopt;
+    std::ifstream file(toWide(path));
+    if (!file) return std::nullopt;
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    if (file.bad()) return std::nullopt;
+    return buffer.str();
+}
+
+void cacheViewerSource(App& app, App::DocTab& tab) {
+    if (!app.keepDeletedTabs) { tab.viewerSource.reset(); return; }
+    if (auto source = readViewerSource(tab.path)) tab.viewerSource = std::move(source);
+}
 
 std::wstring titleForPath(App& app, const std::string& path) {
     if (path.empty()) return tr(app, "title.untitled");
@@ -47,6 +64,10 @@ void syncActiveTab(App& app) {
     }
     App::DocTab& tab = app.tabs[app.activeTab];
     tab.path = app.currentFile;
+    if (app.keepDeletedTabs && !app.currentFile.empty() && !app.editMode) {
+        tab.viewerSource = app.sourceText;
+    }
+    else if (!app.keepDeletedTabs || app.currentFile.empty()) tab.viewerSource.reset();
     // A pathless viewer tab with a custom title (an embedded Learn
     // document from the start page) keeps it; quick notes re-derive
     if (!app.currentFile.empty() || tab.title.empty() || app.editMode) {
@@ -94,12 +115,22 @@ void parkActiveEditBuffer(App& app) {
 
 }  // namespace
 
+void tabsSetKeepDeleted(App& app, bool enabled) {
+    app.keepDeletedTabs = enabled;
+    for (auto& tab : app.tabs) cacheViewerSource(app, tab);
+    if (enabled && !app.currentFile.empty() && app.activeTab >= 0 &&
+        app.activeTab < (int)app.tabs.size()) {
+        app.tabs[app.activeTab].viewerSource = app.sourceText;
+    }
+}
+
 void tabsInit(App& app) {
     if (!app.tabs.empty()) return;
     App::DocTab tab;
     tab.id = ++app.tabIdCounter;
     tab.path = app.currentFile;
     tab.title = titleForPath(app, app.currentFile);
+    if (app.keepDeletedTabs && !tab.path.empty()) tab.viewerSource = app.sourceText;
     // A pathless viewer tab is the start page, not an untitled note
     if (app.currentFile.empty() && !app.editMode) tab.title = L"Tinta";
     app.tabs.push_back(std::move(tab));
@@ -117,9 +148,11 @@ void tabsSeedSession(App& app, const std::vector<std::string>& paths) {
         tab.id = ++app.tabIdCounter;
         tab.path = path;
         tab.title = titleForPath(app, path);
+        cacheViewerSource(app, tab);
         if (app.activeTab < 0 &&
             _stricmp(path.c_str(), app.currentFile.c_str()) == 0) {
             app.activeTab = (int)app.tabs.size();
+            if (app.keepDeletedTabs) tab.viewerSource = app.sourceText;
         }
         app.tabs.push_back(std::move(tab));
     }
@@ -128,6 +161,7 @@ void tabsSeedSession(App& app, const std::vector<std::string>& paths) {
         tab.id = ++app.tabIdCounter;
         tab.path = app.currentFile;
         tab.title = titleForPath(app, app.currentFile);
+        if (app.keepDeletedTabs && !tab.path.empty()) tab.viewerSource = app.sourceText;
         app.tabs.push_back(std::move(tab));
         app.activeTab = (int)app.tabs.size() - 1;
     }
@@ -137,6 +171,14 @@ void tabActivate(App& app, HWND hwnd, int index) {
     tabsInit(app);
     if (index < 0 || index >= (int)app.tabs.size()) return;
     if (index == app.activeTab) return;
+
+    // Resolve the destination before leaving the current tab. A failed
+    // open must not attach the previous document to the destination tab.
+    App::DocTab& destination = app.tabs[index];
+    auto source = readViewerSource(destination.path);
+    if (!source && app.keepDeletedTabs) source = destination.viewerSource;
+    if (!source && destination.editMode) source = toUtf8(destination.editorText);
+    if (!destination.path.empty() && !source) return;
 
     // Leaving an embedded Learn document: an empty tab activated later
     // shows the launcher again
@@ -150,11 +192,15 @@ void tabActivate(App& app, HWND hwnd, int index) {
     if (!tab.path.empty()) {
         // openDocumentInViewer saves the old reading position and restores
         // the new one; parse + viewport-first layout makes this feel instant
-        openDocumentInViewer(app, toWide(tab.path));
+        openDocumentSourceInViewer(app, toWide(tab.path), *source);
+        if (app.keepDeletedTabs) tab.viewerSource = std::move(source);
+        tab.fileMissing = GetFileAttributesW(toWide(tab.path).c_str()) ==
+                          INVALID_FILE_ATTRIBUTES;
     } else {
         // Untitled note: swap in an empty document so the preview pane
         // does not keep showing the previous tab's content
         app.currentFile.clear();
+        app.sourceText.clear();
         auto result = parseDocument(app.parser, std::string(), app.currentFile);
         if (result.success) {
             app.root = result.root;
@@ -204,6 +250,8 @@ void tabOpenPath(App& app, HWND hwnd, const std::string& utf8Path,
     tab.id = ++app.tabIdCounter;
     tab.path = utf8Path;
     tab.title = titleForPath(app, utf8Path);
+    cacheViewerSource(app, tab);
+    if (!utf8Path.empty() && !tab.viewerSource && !std::ifstream(toWide(utf8Path))) return;
     int index = insertBefore < 0 ? (int)app.tabs.size()
                                : std::min(insertBefore, (int)app.tabs.size());
     app.tabs.insert(app.tabs.begin() + index, std::move(tab));
@@ -293,6 +341,9 @@ void tabBecomeStartPage(App& app, HWND hwnd) {
     tab.editMode = false;
     tab.editorDirty = false;
     tab.editorText.clear();
+    tab.viewerSource.reset();
+    tab.fileMissing = false;
+    app.sourceText.clear();
     app.currentFile.clear();
     auto result = parseDocument(app.parser, std::string(), app.currentFile);
     if (result.success) {

@@ -1506,7 +1506,15 @@ void enterEditMode(App& app) {
     // Load raw file content
     std::wstring widePath = toWide(app.currentFile);
     std::ifstream file(widePath, std::ios::binary);
-    if (!file) return;
+    if (!file) {
+        // The viewer still owns the last readable source of a deleted
+        // file. Let the user recover it with Save or Save As.
+        if (!app.keepDeletedTabs || GetFileAttributesW(widePath.c_str()) != INVALID_FILE_ATTRIBUTES) return;
+        enterEditModeWithContent(app, app.sourceText);
+        app.editorDirty = true;
+        updateWindowTitle(app);
+        return;
+    }
 
     std::stringstream buf;
     buf << file.rdbuf();
@@ -1609,6 +1617,15 @@ void exitEditMode(App& app) {
         std::stringstream buf;
         buf << file.rdbuf();
         auto result = parseDocument(app.parser, buf.str(), app.currentFile);
+        if (result.success) {
+            app.sourceText = buf.str();
+            app.root = result.root;
+            app.parseTimeUs = result.parseTimeUs;
+        }
+    } else {
+        // Discard edits back to the last viewed source, even if the file
+        // disappeared. This source lives only in the current process.
+        auto result = parseDocument(app.parser, app.sourceText, app.currentFile);
         if (result.success) {
             app.root = result.root;
             app.parseTimeUs = result.parseTimeUs;
@@ -2000,6 +2017,9 @@ void saveEditorFile(App& app, HWND hwnd) {
         // Reparse and update preview immediately
         editorReparse(app);
 
+        app.sourceText = utf8;
+        if (app.keepDeletedTabs) app.tabs[app.activeTab].viewerSource = app.sourceText;
+
         // Show "Saved!" notification
         signalPush(app, SIG_SUCCESS, SIGI_CHECK,
                    std::wstring(tr(app, "toast.saved")) + L" \u2014 ",
@@ -2059,6 +2079,12 @@ void saveFileAs(App& app, HWND hwnd) {
     std::wstring src = toWide(previous);
     std::wstring dst = toWide(app.currentFile);
     bool ok = CopyFileW(src.c_str(), dst.c_str(), FALSE) != 0;
+    if (!ok && app.keepDeletedTabs && GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        std::ofstream file(dst, std::ios::binary);
+        file.write(app.sourceText.data(), (std::streamsize)app.sourceText.size());
+        file.close();
+        ok = !file.fail();
+    }
     if (!ok) {
         app.currentFile = previous;
         signalPushKey(app, SIG_ERROR, SIGI_WARNING, "toast.save_failed");
@@ -2066,6 +2092,7 @@ void saveFileAs(App& app, HWND hwnd) {
         tabsInit(app);
         App::DocTab& tab = app.tabs[app.activeTab];
         tab.path = app.currentFile;
+        if (app.keepDeletedTabs) tab.viewerSource = app.sourceText;
         size_t slash = app.currentFile.find_last_of("/\\");
         tab.title = toWide(slash == std::string::npos
                                ? app.currentFile
