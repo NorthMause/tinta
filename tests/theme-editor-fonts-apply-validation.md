@@ -52,3 +52,13 @@ save happened to pass, because the freed memory still held the old name.
 
 - Saving under a new name went through the same check: a new text or code
   font applied, but a heading-only change did not. Both apply now.
+
+## Desktop check
+
+Computer use was not available in this session, so the theme editor was not
+operated by hand. The check above calls the same save and theme switch the
+editor's Save button runs (`saveCustomTheme`, then `applyTheme`) and lays
+the document out in the real formats, but does not click the button. The
+full suite passed 39 of 40 on
+the Release build; the one failure is the known first-run crash of
+`editor_context_selection`, which passed on three reruns.

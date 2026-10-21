@@ -53,6 +53,12 @@ fences in both suites (12 parser checks, 64 layout checks).
 Of the 25 ER documentation examples, 11 drew after this change, against
 8 before.
 
+## Built app
+
+A portable copy of the Release `tinta.exe` exported the fixture with
+`--exporthtml` (`out/desktop-check-1021/`, ignored): 16 diagrams came out
+as inline SVG and 14 fences as source, none of them with front matter.
+
 ## Limits
 
 - The front matter `title` is not drawn above the diagram, as Mermaid

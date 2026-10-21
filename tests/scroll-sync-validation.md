@@ -55,3 +55,11 @@ the fixture and 21,430 px in the reporter's document.
 
 - The reporter's document is not committed; the fixture reproduces the
   same block.
+
+## Desktop check
+
+Computer use was not available in this session, so the window was not
+operated by hand. The checks above drive the real input handlers, layout
+and painting in a hidden window instead. The full suite passed 39 of 40 on
+the Release build; the one failure is the known first-run crash of
+`editor_context_selection`, which passed on three reruns.

@@ -48,3 +48,11 @@ which would otherwise read as a stale clipboard rather than a wrong one.
 - Copying a selection with Ctrl+C is unchanged: it copies what is selected.
 - Indented code blocks are off in Tinta (`MD_FLAG_NOINDENTEDCODEBLOCKS`),
   so the fixture has none.
+
+## Desktop check
+
+Computer use was not available in this session, so the window was not
+operated by hand. The checks above drive the real input handlers, layout
+and painting in a hidden window instead. The full suite passed 39 of 40 on
+the Release build; the one failure is the known first-run crash of
+`editor_context_selection`, which passed on three reruns.

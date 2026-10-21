@@ -41,3 +41,11 @@ Before the change it failed in all four configurations on the first notch
 
 - Without word wrap every line is one row, and that path was already
   right.
+
+## Desktop check
+
+Computer use was not available in this session, so the window was not
+operated by hand. The checks above drive the real input handlers, layout
+and painting in a hidden window instead. The full suite passed 39 of 40 on
+the Release build; the one failure is the known first-run crash of
+`editor_context_selection`, which passed on three reruns.
