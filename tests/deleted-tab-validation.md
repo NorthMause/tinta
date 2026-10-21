@@ -46,3 +46,17 @@ existing edited files are checked to bypass the picker. A 30-second wrapper
 timeout bounds dialog failures. No production dialog hooks were added.
 The fixture read normalizes CRLF to match the viewer's text-mode input.
 Files already deleted before this version first read them cannot be recovered.
+
+## Integration with upstream 3.9.0
+
+Merged upstream master 9a6b209 on 2026-10-21. The only textual conflict was
+in the input_tests source list; both deleted_tab_tests.cpp and the upstream
+scroll_sync_tests.cpp are retained.
+
+Built tinta and input_tests in x64 Release. Nine checks passed with the
+normal Windows checkout: the seven checks above, ui_font_language and
+wrapped_cursor_navigation. The additional upstream edit_preview_scroll_sync
+check failed two heading-position assertions with the CRLF fixture (22 lines
+off); it passed with that same fixture temporarily normalized to LF. The
+original fixture bytes were restored after the check. No upstream test or
+fixture was permanently changed to mask this limitation.

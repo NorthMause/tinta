@@ -90,6 +90,8 @@ void editorReplaceAll(App& app, HWND hwnd);
 void editorScrollToSourceOffset(App& app, size_t byteOffset);
 void rebuildLineStarts(App& app);
 size_t editorTopVisibleLine(App& app);
+// Scrolls the edit-mode preview to follow the editor's top line
+void syncPreviewToEditor(App& app);
 std::string toUtf8(const std::wstring& wstr);
 
 #endif // TINTA_EDITOR_H

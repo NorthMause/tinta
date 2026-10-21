@@ -199,8 +199,33 @@ void emitCylinder(std::vector<Prim>& out, const Prim& paint, float x1,
 
 }  // namespace detail
 
+std::string_view skipFrontMatter(std::string_view source) {
+    using detail::trimView;
+    size_t position = 0;
+    if (source.substr(0, 3) == "\xEF\xBB\xBF") position = 3;
+    bool open = false;
+    while (position < source.size()) {
+        size_t newline = source.find('\n', position);
+        if (newline == std::string_view::npos) newline = source.size();
+        std::string_view line =
+            trimView(source.substr(position, newline - position));
+        const size_t next = std::min(newline + 1, source.size());
+        if (open) {
+            if (line == "---") return source.substr(next);
+        } else if (line == "---") {
+            open = true;
+        } else if (!line.empty()) {
+            return source;  // the diagram itself comes first
+        }
+        position = next;
+    }
+    return source;  // no block, or one that never closes
+}
+
 Kind detectKind(std::string_view source) {
     using detail::trimView;
+    // The keyword follows the front matter, which may hold any YAML (#261)
+    source = skipFrontMatter(source);
     size_t position = 0;
     while (position <= source.size()) {
         size_t newline = source.find('\n', position);
@@ -279,6 +304,8 @@ Kind detectKind(std::string_view source) {
 Built build(Kind kind, std::string_view source, const Measure& measure,
             float scale) {
     using namespace detail;
+    // The families parse the diagram, not its front matter (#261)
+    source = skipFrontMatter(source);
     switch (kind) {
         case Kind::Sequence: return buildSequence(source, measure, scale);
         case Kind::Pie: return buildPie(source, measure, scale);

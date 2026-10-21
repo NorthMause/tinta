@@ -608,9 +608,17 @@ static void flushPendingHtml(ParserContext* ctx) {
 static int textCallback(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userdata) {
     auto* ctx = static_cast<ParserContext*>(userdata);
 
-    // Track source offset: set on the current element if not already set
+    // Track source offset: set on the current element if not already set,
+    // and only from text inside the source. md4c hands some text over from
+    // its own static strings (a code line's indentation, line breaks); an
+    // offset taken from one of those pointed nowhere in the document, and
+    // the preview stopped following the editor at that block (#267).
     if (ctx->inputStart && ctx->current() && ctx->current()->sourceOffset == SIZE_MAX) {
-        ctx->current()->sourceOffset = (size_t)(text - ctx->inputStart);
+        const auto start = reinterpret_cast<uintptr_t>(ctx->inputStart);
+        const auto at = reinterpret_cast<uintptr_t>(text);
+        if (at >= start && at - start <= ctx->inputLength) {
+            ctx->current()->sourceOffset = (size_t)(at - start);
+        }
     }
 
     if (type != MD_TEXT_HTML) flushPendingHtml(ctx);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(tinta VERSION 3.8.1 LANGUAGES C CXX)
+project(tinta VERSION 3.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -167,7 +167,7 @@ if(BUILD_TESTING)
     # window, including layout-dependent character sequences (#195).
     set(INPUT_TEST_SOURCES ${SOURCES})
     list(REMOVE_ITEM INPUT_TEST_SOURCES src/main_d2d.cpp)
-    add_executable(input_tests tests/input_tests.cpp tests/deleted_tab_tests.cpp tests/table_input_tests.cpp tests/docked_preview_tests.cpp tests/table_layout_tests.cpp tests/window_drag_tests.cpp tests/tab_drop_tests.cpp tests/tab_hover_card_tests.cpp tests/search_panel_tests.cpp tests/superscript_tests.cpp tests/sidepanel_tests.cpp tests/image_tests.cpp tests/search_input_tests.cpp tests/wrapped_cursor_tests.cpp tests/file_fragment_tests.cpp tests/editor_context_tests.cpp tests/editor_features_tests.cpp tests/ui_font_tests.cpp tests/print_export_tests.cpp ${INPUT_TEST_SOURCES})
+    add_executable(input_tests tests/input_tests.cpp tests/deleted_tab_tests.cpp tests/table_input_tests.cpp tests/docked_preview_tests.cpp tests/table_layout_tests.cpp tests/window_drag_tests.cpp tests/tab_drop_tests.cpp tests/tab_hover_card_tests.cpp tests/search_panel_tests.cpp tests/superscript_tests.cpp tests/sidepanel_tests.cpp tests/image_tests.cpp tests/search_input_tests.cpp tests/wrapped_cursor_tests.cpp tests/file_fragment_tests.cpp tests/editor_context_tests.cpp tests/editor_features_tests.cpp tests/ui_font_tests.cpp tests/print_export_tests.cpp tests/scroll_sync_tests.cpp ${INPUT_TEST_SOURCES})
     target_include_directories(input_tests PRIVATE include ${md4c_SOURCE_DIR}/src)
     target_link_libraries(input_tests PRIVATE $<TARGET_PROPERTY:tinta,LINK_LIBRARIES>)
     target_compile_definitions(input_tests PRIVATE $<TARGET_PROPERTY:tinta,COMPILE_DEFINITIONS>
@@ -183,6 +183,7 @@ if(BUILD_TESTING)
         TINTA_FIND_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/find-table-focus.md"
         TINTA_WRAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/wrapped-cursor-selection.md"
         TINTA_SEARCH_WRAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/search-word-wrap-260.md"
+        TINTA_ZOOM_WRAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/editor-zoom-wrap-266.md"
         TINTA_FRAGMENT_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/file-fragments/index.md"
         TINTA_CONTEXT_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/editor-context-selection.md"
         TINTA_MULTICURSOR_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/editor-multicursor-251.md"
@@ -212,6 +213,11 @@ if(BUILD_TESTING)
         -DTEST_BINARY=$<TARGET_FILE:input_tests>
         -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/wrapped-cursor-test-$<CONFIG>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_wrapped_cursor_tests.cmake)
+    add_test(NAME edit_preview_scroll_sync COMMAND ${CMAKE_COMMAND}
+        -DTEST_BINARY=$<TARGET_FILE:input_tests>
+        -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/scroll-sync-test-$<CONFIG>
+        -DTEST_DOC=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/scroll-sync-267/docs/scroll-sync.md
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_scroll_sync_tests.cmake)
     add_test(NAME search_input_focus COMMAND ${CMAKE_COMMAND}
         -DTEST_BINARY=$<TARGET_FILE:input_tests>
         -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/search-input-test-$<CONFIG>
@@ -272,7 +278,9 @@ if(BUILD_TESTING)
     target_include_directories(code_block_layout_tests PRIVATE include ${md4c_SOURCE_DIR}/src)
     target_link_libraries(code_block_layout_tests PRIVATE $<TARGET_PROPERTY:tinta,LINK_LIBRARIES>)
     target_compile_definitions(code_block_layout_tests PRIVATE $<TARGET_PROPERTY:tinta,COMPILE_DEFINITIONS>
-        TINTA_CODE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-spacing.md")
+        TINTA_CODE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-spacing.md"
+        TINTA_COPY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-copy-269.md"
+        TINTA_MERMAID_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mermaid-front-matter-261.md")
     add_test(NAME code_block_layout COMMAND code_block_layout_tests)
 
     add_executable(syntax_tests tests/syntax_tests.cpp ${INPUT_TEST_SOURCES})
@@ -317,7 +325,8 @@ if(BUILD_TESTING)
     target_include_directories(theme_tests PRIVATE include ${md4c_SOURCE_DIR}/src)
     target_link_libraries(theme_tests PRIVATE $<TARGET_PROPERTY:tinta,LINK_LIBRARIES>)
     target_compile_definitions(theme_tests PRIVATE $<TARGET_PROPERTY:tinta,COMPILE_DEFINITIONS>
-        TINTA_THEME_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/inline-code-color.md")
+        TINTA_THEME_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/inline-code-color.md"
+        TINTA_THEME_FONTS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/theme-editor-fonts-265.md")
     add_test(NAME inline_code_theme COMMAND ${CMAKE_COMMAND}
         -DTEST_BINARY=$<TARGET_FILE:theme_tests>
         -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/theme-test-$<CONFIG>
@@ -363,6 +372,8 @@ if(BUILD_TESTING)
     target_include_directories(mermaid_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
+    target_compile_definitions(mermaid_tests PRIVATE
+        TINTA_MERMAID_FRONT_MATTER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mermaid-front-matter-261.md")
     add_test(NAME mermaid_parser COMMAND mermaid_tests)
 
     # PlantUML CLI test double (used by the plantuml suites; no Java needed).

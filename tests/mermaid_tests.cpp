@@ -373,6 +373,95 @@ void testExtBuilders() {
     }
 }
 
+// The ```mermaid fences of a Markdown file, in order
+std::vector<std::string> mermaidFences(const std::string& markdown) {
+    std::vector<std::string> fences;
+    std::string current;
+    bool inside = false;
+    size_t position = 0;
+    while (position < markdown.size()) {
+        size_t newline = markdown.find('\n', position);
+        if (newline == std::string::npos) newline = markdown.size();
+        std::string line = markdown.substr(position, newline - position);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!inside && line.rfind("```mermaid", 0) == 0) {
+            inside = true;
+            current.clear();
+        } else if (inside && line == "```") {
+            inside = false;
+            fences.push_back(current);
+        } else if (inside) {
+            current += line + "\n";
+        }
+        position = newline + 1;
+    }
+    return fences;
+}
+
+// What the app does with a fence: draws it, or shows its source
+bool drawsDiagram(const std::string& source, std::string& error) {
+    const auto kind = mermaidext::detectKind(source);
+    if (kind == mermaidext::Kind::None) {
+        error = "diagram type not recognised";
+        return false;
+    }
+    if (kind == mermaidext::Kind::Flowchart) {
+        auto parsed = mermaid::parse(source);
+        error = parsed.error;
+        return parsed.success;
+    }
+    auto built = mermaidext::build(kind, source, fakeMeasure, 1.0f);
+    error = built.error;
+    return built.ok && !built.prims.empty();
+}
+
+// #261: a diagram may open with YAML front matter (title, config). The
+// fixture's first five fences put it on other diagram types; the rest are
+// the 25 examples of Mermaid's ER documentation, in order.
+void testFrontMatterFixture() {
+    std::ifstream file(TINTA_MERMAID_FRONT_MATTER_FIXTURE, std::ios::binary);
+    check(static_cast<bool>(file), "front matter fixture opens");
+    const std::string markdown((std::istreambuf_iterator<char>(file)),
+                               std::istreambuf_iterator<char>());
+    const auto fences = mermaidFences(markdown);
+    check(fences.size() == 30, "the fixture has 5 front matter and 25 ER docs fences");
+    // Fences that draw: every one with front matter (1-6, 9, 30) and the
+    // ER docs examples whose syntax the ER renderer knows. The others use
+    // ER syntax it does not support yet (cardinalities in words, a quoted
+    // entity on its own, subgraphs, style and classDef), and show their
+    // source instead of a wrong diagram.
+    const std::vector<size_t> draws = {1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15, 16, 18, 19, 30};
+    for (size_t i = 0; i < fences.size(); ++i) {
+        std::string error;
+        const bool drawn = drawsDiagram(fences[i], error);
+        const bool expected =
+            std::find(draws.begin(), draws.end(), i + 1) != draws.end();
+        if (drawn != expected) {
+            std::cerr << "  fence " << i + 1 << (drawn ? " draws" : " shows source: " + error) << '\n';
+        }
+        check(drawn == expected, "a fence draws exactly when its syntax is supported");
+    }
+    // The front matter is skipped whole, whatever YAML it holds, and only
+    // when it opens the source
+    using mermaidext::skipFrontMatter;
+    check(skipFrontMatter("---\ntitle: T\n---\nerDiagram\n") == "erDiagram\n",
+          "a title block is skipped");
+    check(skipFrontMatter("\xEF\xBB\xBF\n---\r\nconfig:\r\n  theme: dark\r\n---  \r\npie\r\n") ==
+              "pie\r\n",
+          "a byte order mark, a blank line, CRLF and trailing spaces are fine");
+    check(skipFrontMatter("---\ntitle: never closed\nerDiagram\n") ==
+              "---\ntitle: never closed\nerDiagram\n",
+          "an unclosed block is not front matter");
+    check(skipFrontMatter("graph TD\nA---B\n---\n") == "graph TD\nA---B\n---\n",
+          "a --- line after the diagram starts is not front matter");
+    check(skipFrontMatter("---\n---\n").empty(), "an empty block leaves nothing");
+    // The flowchart parser blanks the block, so error lines still count
+    // from the top of the fence
+    auto bad = mermaid::parse("---\ntitle: T\n---\nflowchart LR\n  A -- B\n");
+    check(!bad.success && bad.errorLine == 5,
+          "a flowchart error after front matter reports its own line");
+}
+
 void testExtFallbacks() {
     auto sequence = mermaidext::build(
         mermaidext::Kind::Sequence,
@@ -404,6 +493,7 @@ int main(int argc, char** argv) {
     testDetectKind();
     testExtBuilders();
     testExtFallbacks();
+    testFrontMatterFixture();
     testFiles(argc, argv);
 
     if (failures != 0) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## [v3.9.0] - 2026-10-21
+
+### Fixed
+- Mermaid diagrams that open with YAML front matter (`title`, `config`) render instead of showing their source, for every diagram type, including the first example of Mermaid's ER documentation. Reported by @tigerhawkvok (#261)
+- In edit mode the preview keeps following the editor to the end of long documents; a code block whose first line was indented stopped it partway down. Reported by @derek-price (#267)
+- With word wrap on, zooming the editor with Ctrl+wheel no longer draws long lines over the lines below them. Reported by @a86022 (#266)
+- Fonts saved in the theme editor apply to the open document at once, including a change to the heading font alone. Reported by @go4399 (#265)
+- A code block's copy button no longer adds a line break after the last line. Reported by @dmacasek (#269)
+
 ## [v3.8.1] - 2026-10-16
 
 ### Added
