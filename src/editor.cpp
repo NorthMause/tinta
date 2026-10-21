@@ -1752,11 +1752,17 @@ void renderEditorReadingButton(App& app) {
 
 // --- File save ---
 
-// Classic Save As dialog for untitled quick notes (Ctrl+N). Returns false
+// Save As for quick notes, explicit copies and deleted originals. Returns false
 // when the user cancels; on success app.currentFile carries the new path
 // and the note becomes a normal file-backed session.
 static bool promptSaveAsPath(App& app, HWND hwnd) {
     wchar_t path[MAX_PATH] = L"";
+    const std::filesystem::path previous(toWide(app.currentFile));
+    const std::wstring name = previous.filename().wstring();
+    if (!name.empty()) wcsncpy_s(path, name.c_str(), _TRUNCATE);
+    const std::wstring directory = previous.parent_path().wstring();
+    const DWORD attributes = directory.empty() ? INVALID_FILE_ATTRIBUTES
+        : GetFileAttributesW(directory.c_str());
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hwnd;
@@ -1765,6 +1771,8 @@ static bool promptSaveAsPath(App& app, HWND hwnd) {
                       L"PlantUML (*.puml;*.plantuml)\0*.puml;*.plantuml\0"
                       L"All files (*.*)\0*.*\0";
     ofn.lpstrFile = path;
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY))
+        ofn.lpstrInitialDir = directory.c_str();
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrDefExt = L"md";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
@@ -1936,15 +1944,13 @@ void renderQuickNoteEmptyState(App& app) {
     }
 }
 
-void saveEditorFile(App& app, HWND hwnd) {
+// The destination was checked or explicitly confirmed by the user.
+// Save As may choose a new file, so this writer must not prompt again.
+static void writeEditorFile(App& app, HWND hwnd) {
     // The open table cell belongs in the save (#148)
     tableEditCommit(app);
     auto seenKey = frontmatterSeenKey(app);
     std::string firstSeen = app.frontmatterFirstSeen.count(seenKey) ? app.frontmatterFirstSeen[seenKey] : fm::utcNow();
-    if (app.currentFile.empty()) {
-        // Untitled quick note: name it now; cancel keeps editing untitled
-        if (!promptSaveAsPath(app, hwnd)) return;
-    }
 
     std::string utf8 = toUtf8(app.editorText);
     if (!isPlainTextDocumentPath(app.currentFile) &&
@@ -2043,6 +2049,24 @@ void saveEditorFile(App& app, HWND hwnd) {
     }
 }
 
+void saveEditorFile(App& app, HWND hwnd) {
+    tableEditCommit(app);
+    if (app.currentFile.empty()) {
+        saveEditorFileAs(app, hwnd);
+        return;
+    }
+    // Check the disk directly: deletion may precede the file-watch tick.
+    if (GetFileAttributesW(toWide(app.currentFile).c_str()) == INVALID_FILE_ATTRIBUTES) {
+        const DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+            app.editorDirty = true; // cancelling must also keep a clean recovery buffer open
+            saveEditorFileAs(app, hwnd);
+            return;
+        }
+    }
+    writeEditorFile(app, hwnd);
+}
+
 // Save As (#121): pick a new path, write there, and the tab follows
 void saveEditorFileAs(App& app, HWND hwnd) {
     auto key = frontmatterSeenKey(app);
@@ -2050,7 +2074,7 @@ void saveEditorFileAs(App& app, HWND hwnd) {
     if (!promptSaveAsPath(app, hwnd)) return;  // cancel keeps the old path
     if (!firstSeen.empty()) app.frontmatterFirstSeen[frontmatterSeenKey(app)] = firstSeen;
     app.editorDirty = true;  // force the write even for a clean buffer
-    saveEditorFile(app, hwnd);
+    writeEditorFile(app, hwnd);
     if (app.editorDirty) return;  // write failed (toast already shown)
 
     // The active tab takes on the new identity

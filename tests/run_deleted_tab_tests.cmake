@@ -5,7 +5,7 @@ file(MAKE_DIRECTORY "${TEST_DIR}")
 configure_file("${TEST_BINARY}" "${TEST_DIR}/input_tests.exe" COPYONLY)
 file(WRITE "${TEST_DIR}/settings.ini" "; Isolated deleted tab test configuration\n")
 execute_process(COMMAND "${TEST_DIR}/input_tests.exe" --deleted-tab-tests
-    WORKING_DIRECTORY "${TEST_DIR}" RESULT_VARIABLE result)
+    WORKING_DIRECTORY "${TEST_DIR}" RESULT_VARIABLE result TIMEOUT 30)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "Deleted tab test failed: ${result}")
 endif()

@@ -6,8 +6,10 @@ settings.ini as keepDeletedTabs. Enabling snapshots already open files;
 disabling immediately releases all per-tab viewer source copies.
 
 When enabled, tabs retain their last readable source in memory only. A missing original
-can still be selected, edited, saved to recreate it, or saved under a new
-name. Existing disk files take precedence on tab activation. Empty files
+can still be selected and edited. Save (including Ctrl+S) opens Save As when
+the original or its parent folder no longer exists. The old filename is
+suggested, but a destination must be explicitly confirmed; cancellation
+keeps the text, path and editor open. Existing disk files take precedence on tab activation. Empty files
 have a valid empty snapshot. Closing a tab or exiting the process releases
 its source copy. No persistent viewer cache is written or read. The existing
 session restore continues to skip missing files on the next launch.
@@ -24,7 +26,7 @@ headings, a table, lists, emphasis, a quote, a link and code.
   `search_results_panel`.
 - The native deleted-tab test covers deletion while active, switching,
   editing, discarding edits, parked editor recovery, saving to recreate the
-  original, externally recreated files, deleted empty files, inactive
+  document through an explicitly confirmed Save As, externally recreated files, deleted empty files, inactive
   session-seeded tabs, failed opens, releasing cached state on close, and
   the absence of a recovery copy after all in-memory tabs are discarded.
 - It verifies that no `tab-cache/` directory is created.
@@ -37,5 +39,10 @@ headings, a table, lists, emphasis, a quote, a link and code.
 - Cached content is laid out at widths 500 and 1000 with themes 0 and 5.
   The native print harness produces `build/deleted-tab-memory-test-Release/cached-pages/page-1.png`.
 
-The Save As file picker was not driven through the UI. Files already
-deleted before this version first read them cannot be recovered.
+The native Save As dialog is now exercised with a thread-local CBT hook in
+the test process: cancel, a new destination, explicit reuse of the old name,
+save-and-exit cancellation, and a deleted parent folder. Normal saves of
+existing edited files are checked to bypass the picker. A 30-second wrapper
+timeout bounds dialog failures. No production dialog hooks were added.
+The fixture read normalizes CRLF to match the viewer's text-mode input.
+Files already deleted before this version first read them cannot be recovered.

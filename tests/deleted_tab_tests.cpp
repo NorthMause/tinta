@@ -12,8 +12,71 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <commdlg.h>
+#include <dlgs.h>
 
 #include "settings_preview.h"
+
+namespace {
+// Exercise the real modal file picker in this test's UI thread only.
+// No production hooks or changes to the user's desktop are needed.
+struct SavePickerProbe {
+    const wchar_t* destination = nullptr; // null = Cancel
+    int shown = 0;
+    std::wstring suggestedName;
+};
+SavePickerProbe* pickerProbe = nullptr;
+void CALLBACK pickerAction(HWND dialog, UINT, UINT_PTR timer, DWORD) {
+    KillTimer(dialog, timer);
+    HWND filename = GetDlgItem(dialog, edt1);
+    // Modern Windows nests the filename edit (1001) inside DirectUI;
+    // legacy dialogs expose edt1 directly.
+    if (!filename) EnumChildWindows(dialog, [](HWND child, LPARAM result) -> BOOL {
+        wchar_t cls[80]{};
+        GetClassNameW(child, cls, 80);
+        if (GetDlgCtrlID(child) == 1001 && std::wstring(cls) == L"Edit") {
+            *(HWND*)result = child;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&filename);
+    wchar_t name[MAX_PATH]{};
+    GetWindowTextW(filename, name, MAX_PATH);
+    pickerProbe->suggestedName = name;
+    if (pickerProbe->destination) {
+        SetWindowTextW(filename, pickerProbe->destination);
+        PostMessageW(dialog, WM_COMMAND, IDOK, 0);
+    } else PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
+}
+void CALLBACK pickerTimeout(HWND dialog, UINT, UINT_PTR timer, DWORD) {
+    KillTimer(dialog, timer);
+    PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
+}
+LRESULT CALLBACK pickerHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HCBT_ACTIVATE && pickerProbe && pickerProbe->shown == 0) {
+        const HWND dialog = (HWND)wParam;
+        wchar_t name[32]{};
+        GetClassNameW(dialog, name, 32);
+        if (std::wstring(name) == L"#32770") {
+            ++pickerProbe->shown;
+            SetTimer(dialog, 501, 25, pickerAction);
+            SetTimer(dialog, 502, 5000, pickerTimeout);
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+template<class Action>
+SavePickerProbe withSavePicker(const wchar_t* destination, Action action) {
+    SavePickerProbe probe;
+    probe.destination = destination;
+    pickerProbe = &probe;
+    const HHOOK hook = SetWindowsHookExW(WH_CBT, pickerHook, nullptr, GetCurrentThreadId());
+    if (hook) action();
+    if (hook) UnhookWindowsHookEx(hook);
+    pickerProbe = nullptr;
+    return probe;
+}
+}
 
 int runDeletedTabTests() {
     namespace fs = std::filesystem;
@@ -30,7 +93,9 @@ int runDeletedTabTests() {
     if (settings != "; Isolated deleted tab test configuration\n" &&
         settings != "; Isolated deleted tab test configuration\r\n") return 2;
     loadLanguageOverrides();
-    const std::string source = read(TINTA_DELETED_TAB_FIXTURE);
+    std::string source = read(TINTA_DELETED_TAB_FIXTURE);
+    // Git's Windows checkout may use CRLF; the viewer reads in text mode.
+    source.erase(std::remove(source.begin(), source.end(), '\r'), source.end());
     check(!source.empty(), "mixed Markdown fixture loads");
     const auto a = dir / L"Temporary \u0437\u0430\u043c\u0435\u0442\u043a\u0430.md";
     const auto b = dir / "Other.md";
@@ -120,11 +185,35 @@ int runDeletedTabTests() {
     tabActivate(app, app.hwnd, 0);
     check(app.editMode && app.editorDirty && toUtf8(app.editorText) == source,
           "parked recovery editor survives switching");
-    saveEditorFile(app, app.hwnd);
-    check(!app.editorDirty && read(a) == source, "Save recreates the deleted file");
+    const auto cancelled = withSavePicker(nullptr, [&] { saveEditorFile(app, app.hwnd); });
+    check(cancelled.shown == 1 && cancelled.suggestedName == a.filename().wstring(),
+          "Save on a missing original opens Save As with its previous name");
+    check(!fs::exists(a) && app.editMode && app.editorDirty &&
+          app.currentFile == toUtf8(a.wstring()) && toUtf8(app.editorText) == source,
+          "cancelling keeps the original deleted and preserves the editor text and path");
+    const auto recovered = dir / "Recovered.md";
+    fs::remove(recovered);
+    const std::wstring recoveredName = recovered.wstring();
+    const auto chosen = withSavePicker(recoveredName.c_str(), [&] { saveEditorFile(app, app.hwnd); });
+    check(chosen.shown == 1 && !app.editorDirty && read(recovered) == source && !fs::exists(a),
+          "confirmation saves to the explicitly chosen new path without recreating the original");
+    check(app.currentFile == toUtf8(recoveredName) && app.tabs[0].path == app.currentFile,
+          "the recovered tab follows the chosen path");
+    fs::remove(recovered); // deletion while a clean editor is still open
+    const auto cancelExit = withSavePicker(nullptr, [&] { confirmExitAction(app, app.hwnd, 1); });
+    check(cancelExit.shown == 1 && app.editMode && app.editorDirty && !fs::exists(recovered),
+          "cancelling Save As during save-and-exit also preserves a clean recovery buffer");
+    const auto sameName = withSavePicker(recoveredName.c_str(), [&] { saveEditorFile(app, app.hwnd); });
+    check(sameName.shown == 1 && !app.editorDirty && read(recovered) == source,
+          "the old name is permitted after explicit Save As confirmation");
+    app.editorText += L"\nExisting-file edit\n";
+    app.editorDirty = true;
+    const auto ordinary = withSavePicker(nullptr, [&] { saveEditorFile(app, app.hwnd); });
+    check(ordinary.shown == 0 && !app.editorDirty && read(recovered) == toUtf8(app.editorText),
+          "an existing file still saves directly");
     exitEditMode(app);
     tabActivate(app, app.hwnd, 1);
-    std::ofstream(a) << "# Recreated externally\n";
+    std::ofstream(recovered) << "# Recreated externally\n";
     tabActivate(app, app.hwnd, 0);
     check(app.sourceText == "# Recreated externally\n" && !app.tabs[0].fileMissing,
           "recreated file supersedes cached source");
@@ -167,6 +256,21 @@ int runDeletedTabTests() {
     check(app.activeTab == 1 && app.currentFile == toUtf8(b.wstring()),
           "disabled retention does not reopen a deleted file");
     for (const auto& tab : app.tabs) check(!tab.viewerSource, "disabled tabs keep no source copies");
+    const auto removedFolder = dir / "Removed-folder";
+    fs::create_directory(removedFolder);
+    const auto removedFile = removedFolder / "Gone.md";
+    std::ofstream(removedFile, std::ios::binary) << source;
+    tabOpenPath(app, app.hwnd, toUtf8(removedFile.wstring()));
+    enterEditMode(app);
+    fs::remove(removedFile);
+    fs::remove(removedFolder);
+    const auto folderCopy = dir / "Folder-recovery.md";
+    fs::remove(folderCopy);
+    const auto folderName = folderCopy.wstring();
+    const auto folderSave = withSavePicker(folderName.c_str(), [&] { saveEditorFile(app, app.hwnd); });
+    check(folderSave.shown == 1 && folderSave.suggestedName == L"Gone.md" &&
+          !app.editorDirty && read(folderCopy) == source && !fs::exists(removedFolder),
+          "a deleted parent folder also requires Save As and is never recreated silently");
     DestroyWindow(app.hwnd);
     std::cout << "Deleted tabs: " << failures << " failures\n";
     return failures ? 1 : 0;

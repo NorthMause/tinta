@@ -11,7 +11,9 @@ This option increases RAM usage and keeps copies only until Tinta closes.
 
 - Switch to another tab.
 - Delete this file, then return here.
-- Use Edit and Save, or Save As, to recover it.
+- Edit the recovered text, then press Ctrl+S: Save As must open with the old name suggested.
+- Cancel: the original stays deleted and the edited text stays available.
+- Press Ctrl+S again and confirm a destination to recover the document.
 
 > Keep the surrounding content as well as the heading.
 
