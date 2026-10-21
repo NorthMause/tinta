@@ -45,6 +45,13 @@ enum class Kind {
 // Inspects the first meaningful line's keyword.
 Kind detectKind(std::string_view source);
 
+// The source after its YAML front matter (#261): a `---` line, preceded by
+// nothing but blank lines (and a byte order mark), through the next `---`
+// line. Mermaid reads a diagram's title and config from it; the diagram
+// starts after it. A source without one, or whose block never closes,
+// comes back whole. Always a view into `source`.
+std::string_view skipFrontMatter(std::string_view source);
+
 struct Size {
     float w = 0.0f;
     float h = 0.0f;

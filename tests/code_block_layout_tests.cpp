@@ -4,6 +4,7 @@
 #include "render.h"
 #include "utils.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <functional>
@@ -87,6 +88,29 @@ std::string escaped(const std::wstring& text) {
         else out += '?';
     }
     return out;
+}
+
+// #261: in the app's own layout, Mermaid fences that open with YAML front
+// matter are drawn as diagrams, not shown as source
+void testMermaidFrontMatter(App& app) {
+    std::ifstream file(TINTA_MERMAID_FIXTURE, std::ios::binary);
+    check(file.good(), "Mermaid front matter fixture is available");
+    std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    app.root = app.parser.parse(source).root;
+    layoutDocument(app);
+    ensureLayoutComplete(app);
+    check(app.codeBlocks.size() == 30, "the fixture lays out its 30 Mermaid fences");
+    // As in mermaid_tests: every front matter fence draws, and so do the
+    // ER docs examples whose syntax is supported
+    const std::vector<size_t> draws = {1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15, 16, 18, 19, 30};
+    for (size_t i = 0; i < app.codeBlocks.size(); ++i) {
+        const bool expected = std::find(draws.begin(), draws.end(), i + 1) != draws.end();
+        check(app.codeBlocks[i].isDiagram == expected,
+              "fence " + std::to_string(i + 1) + (expected ? " is drawn as a diagram"
+                                                            : " falls back to its source"));
+    }
+    check(app.docText.find(L"still lays out below it") != std::wstring::npos,
+          "text after the last diagram lays out");
 }
 
 std::wstring clipboardText(HWND window) {
@@ -230,6 +254,7 @@ int main() {
                     app.width = width;
                     testCases(app);
                     testMixedFixture(app);
+                    testMermaidFrontMatter(app);
                 }
             }
         }

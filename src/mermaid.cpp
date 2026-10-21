@@ -1,4 +1,5 @@
 #include "mermaid.h"
+#include "mermaid_ext.h"
 
 #include <algorithm>
 #include <cctype>
@@ -556,6 +557,13 @@ ParseResult fail(ParseResult result, size_t line, std::string message) {
 
 ParseResult parse(std::string_view source) {
     std::string normalized(source);
+    // YAML front matter (#261) is blanked, its line breaks kept, so error
+    // lines still count from the top of the fence
+    const size_t frontMatter = static_cast<size_t>(
+        mermaidext::skipFrontMatter(source).data() - source.data());
+    for (size_t i = 0; i < frontMatter; i++) {
+        if (normalized[i] != '\n') normalized[i] = ' ';
+    }
     if (normalized.size() >= 3 &&
         static_cast<unsigned char>(normalized[0]) == 0xEF &&
         static_cast<unsigned char>(normalized[1]) == 0xBB &&

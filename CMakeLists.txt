@@ -268,7 +268,8 @@ if(BUILD_TESTING)
     target_link_libraries(code_block_layout_tests PRIVATE $<TARGET_PROPERTY:tinta,LINK_LIBRARIES>)
     target_compile_definitions(code_block_layout_tests PRIVATE $<TARGET_PROPERTY:tinta,COMPILE_DEFINITIONS>
         TINTA_CODE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-spacing.md"
-        TINTA_COPY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-copy-269.md")
+        TINTA_COPY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/code-block-copy-269.md"
+        TINTA_MERMAID_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mermaid-front-matter-261.md")
     add_test(NAME code_block_layout COMMAND code_block_layout_tests)
 
     add_executable(syntax_tests tests/syntax_tests.cpp ${INPUT_TEST_SOURCES})
@@ -360,6 +361,8 @@ if(BUILD_TESTING)
     target_include_directories(mermaid_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
+    target_compile_definitions(mermaid_tests PRIVATE
+        TINTA_MERMAID_FRONT_MATTER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mermaid-front-matter-261.md")
     add_test(NAME mermaid_parser COMMAND mermaid_tests)
 
     # PlantUML CLI test double (used by the plantuml suites; no Java needed).
