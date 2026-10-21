@@ -45,7 +45,12 @@ with word wrap off and on, it checks that:
 - with the editor scrolled so each heading is its top line, the preview
   shows that heading at its top, within 80 px;
 - wheeling the source down from the top, and on past its end, never moves
-  the preview up and takes it to its end.
+  the preview up and takes it to its end;
+- the other direction, reported on the issue later: with the reading view
+  scrolled to each heading, E opens the editor on that heading's line. It
+  maps the reading position through the same anchors, and past the bad one
+  opened the editor at the last line (365 lines away for the heading after
+  the fixture's first YAML block).
 
 The same suite run on the reporter's document passes. With the old offset
 code both fail: headings after the YAML block are off by up to 10,019 px in

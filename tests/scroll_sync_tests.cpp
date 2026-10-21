@@ -136,6 +136,44 @@ void followsEditor(App& app, const std::string& source, const char* path, int wi
 }
 }
 
+// The other direction, reported on #267 too: E opens the editor where the
+// reader is. That maps the reading position to a source line through the
+// same anchors, and past the bad one it opened the editor at the last line.
+void editOpensWhereReading(App& app, const char* path, int width, int height) {
+    const std::string where = " (" + std::to_string(width) + "x" + std::to_string(height) + ")";
+    app.width = width; app.height = height;
+    app.currentFile = path;
+    app.root = nullptr;
+    // Lay the document out for reading, as opening it does
+    enterEditMode(app); exitEditMode(app);
+    ensureLayoutComplete(app);
+    const auto headings = app.headings;
+    float worst = 0.0f;
+    std::wstring worstHeading;
+    int checked = 0;
+    for (const auto& heading : headings) {
+        if (heading.y <= documentContentTop(app) + 1.0f) continue;  // the top opens at the top
+        app.scrollY = app.targetScrollY = heading.y + 1.0f;
+        enterEditMode(app);
+        const long line = headingLine(app, heading);
+        size_t cursorLine = 0;
+        while (cursorLine + 1 < app.editorLineStarts.size() &&
+               app.editorLineStarts[cursorLine + 1] <= app.editorCursorPos) {
+            ++cursorLine;
+        }
+        if (line >= 0) {
+            const float off = std::abs((float)cursorLine - (float)line);
+            if (off > worst) { worst = off; worstHeading = heading.text; }
+            ++checked;
+        }
+        exitEditMode(app);
+        ensureLayoutComplete(app);  // the reading layout and its anchors again
+    }
+    check(checked >= 10, "enough headings to open the editor at" + where);
+    if (worst > 1.0f) std::wcerr << L"  E at heading " << worstHeading << L" opened " << worst << L" lines away\n";
+    check(worst <= 1.0f, "E opens the editor at the heading being read" + where);
+}
+
 int runScrollSyncTests(const char* path) {
     std::ifstream file(path, std::ios::binary);
     const std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -153,6 +191,8 @@ int runScrollSyncTests(const char* path) {
     for (auto size : {std::pair<int, int>{1979, 1251}, std::pair<int, int>{1050, 900}})
         for (bool wrap : {false, true})
             followsEditor(app, source, path, size.first, size.second, wrap);
+    for (auto size : {std::pair<int, int>{1979, 1251}, std::pair<int, int>{1050, 900}})
+        editOpensWhereReading(app, path, size.first, size.second);
     DestroyWindow(app.hwnd); app.hwnd = nullptr; state.reset(); CoUninitialize();
     std::cout << "Scroll sync: " << failures << " failures\n";
     return failures ? 1 : 0;
