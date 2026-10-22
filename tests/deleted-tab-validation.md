@@ -60,3 +60,22 @@ check failed two heading-position assertions with the CRLF fixture (22 lines
 off); it passed with that same fixture temporarily normalized to LF. The
 original fixture bytes were restored after the check. No upstream test or
 fixture was permanently changed to mask this limitation.
+
+## Closing beside unavailable tabs (#275)
+
+A native regression added on 2026-10-22 reproduced the invalid active index
+and wrong document identity before the fix (seven failed assertions; no
+full-app crash was claimed). It creates real native App instances, opens
+copies of the mixed Markdown fixture, removes inactive files and closes the
+active tab with retention disabled (the default).
+
+The four cases cover a missing left neighbor, a missing right neighbor,
+an available third tab beyond a missing neighbor, and multiple missing
+survivors. Closing now tries available neighbors before removing the active
+tab; if none can activate, its slot becomes a start page while missing tabs
+remain available for explicit closure or later recreation. Dirty-close
+confirmation also requires the requested tab to be active.
+
+After the fix, tinta and input_tests built in MSVC x64 Release and all nine
+checks listed under integration passed, including deleted_tab. Existing
+active/inactive retention, recovery Save As and settings checks still run.

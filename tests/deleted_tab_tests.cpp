@@ -16,6 +16,7 @@
 #include <dlgs.h>
 
 #include "settings_preview.h"
+#include "startpage.h"
 
 namespace {
 // Exercise the real modal file picker in this test's UI thread only.
@@ -271,6 +272,54 @@ int runDeletedTabTests() {
     check(folderSave.shown == 1 && folderSave.suggestedName == L"Gone.md" &&
           !app.editorDirty && read(folderCopy) == source && !fs::exists(removedFolder),
           "a deleted parent folder also requires Save As and is never recreated silently");
+    // Closing must handle a neighbor that cannot be activated with retention off.
+    // Use fresh native app states so an invalid index is reported before any
+    // later operation could accidentally index the broken tab list.
+    for (int scenario = 0; scenario < 4; ++scenario) {
+        const auto closeDir = dir / ("close-missing-" + std::to_string(scenario));
+        fs::create_directories(closeDir);
+        const auto first = closeDir / "First.md";
+        const auto second = closeDir / "Second.md";
+        const auto third = closeDir / "Third.md";
+        for (const auto& path : {first, second, third})
+            std::ofstream(path, std::ios::binary) << source;
+        auto closeState = std::make_unique<App>();
+        App& closingApp = *closeState;
+        closingApp.hwnd = CreateWindowExW(0, L"STATIC", L"Close missing tab test", WS_POPUP,
+            0, 0, 1000, 800, nullptr, nullptr, nullptr, nullptr);
+        if (!closingApp.hwnd || !initD2D(closingApp) || !createRenderTarget(closingApp)) return 1;
+        applyTheme(closingApp, 0);
+        check(!closingApp.keepDeletedTabs, "close regression uses default disabled retention");
+        openDocumentInViewer(closingApp, first.wstring());
+        tabsInit(closingApp);
+        tabOpenPath(closingApp, closingApp.hwnd, toUtf8(second.wstring()), false);
+        if (scenario >= 2) tabOpenPath(closingApp, closingApp.hwnd, toUtf8(third.wstring()), false);
+        const int active = scenario == 0 ? 1 : scenario == 3 ? 2 : 0;
+        tabActivate(closingApp, closingApp.hwnd, active);
+        if (scenario == 0 || scenario == 3) fs::remove(first);
+        if (scenario != 0) fs::remove(second);
+        tabCloseIndex(closingApp, closingApp.hwnd, active);
+        const bool valid = closingApp.activeTab >= 0 &&
+            closingApp.activeTab < (int)closingApp.tabs.size();
+        check(valid, "closing beside deleted tabs leaves a valid active index");
+        if (valid) {
+            const auto& selected = closingApp.tabs[closingApp.activeTab];
+            check(selected.path == closingApp.currentFile,
+                  "the surviving tab stays attached to its own document");
+            if (scenario >= 2 && scenario != 3) {
+                check(closingApp.tabs.size() == 2 && closingApp.currentFile == toUtf8(third.wstring()) &&
+                      closingApp.sourceText == source,
+                      "closing skips the missing neighbor and selects another available tab");
+            } else {
+                check(closingApp.currentFile.empty() && selected.path.empty() &&
+                      closingApp.sourceText.empty() && !closingApp.editMode && startPageActive(closingApp),
+                      "when every other tab is missing closing lands on the start page");
+                check(closingApp.tabs.size() == (scenario == 3 ? 3u : 2u),
+                      "unavailable tabs are retained beside the replacement start page");
+            }
+        }
+        DestroyWindow(closingApp.hwnd);
+    }
     DestroyWindow(app.hwnd);
     std::cout << "Deleted tabs: " << failures << " failures\n";
     return failures ? 1 : 0;

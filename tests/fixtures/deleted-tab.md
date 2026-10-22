@@ -22,3 +22,11 @@ This option increases RAM usage and keeps copies only until Tinta closes.
 ```text
 Last readable version
 ```
+
+## Closing beside a deleted tab with retention disabled
+
+Turn **Keep deleted files in memory** off. Open copies of this document in
+two tabs, delete the inactive copy from disk, then close the active tab.
+Tinta must show its start page with a valid active tab; it must not show the
+closed document under the missing tab's name. Repeat with the tab order
+reversed. If a third readable tab exists, it must be selected instead.

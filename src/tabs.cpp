@@ -278,7 +278,8 @@ void tabCloseIndex(App& app, HWND hwnd, int index) {
                      : (app.tabs[index].editMode && app.tabs[index].editorDirty);
     if (dirty) {
         if (index != app.activeTab) tabActivate(app, hwnd, index);
-        app.pendingTabClose = app.activeTab;
+        if (app.activeTab != index) return;
+        app.pendingTabClose = index;
         app.confirmExitPending = true;
         app.confirmExitOpenedAt = std::chrono::steady_clock::now();
         InvalidateRect(hwnd, nullptr, FALSE);
@@ -306,9 +307,20 @@ void tabCloseIndex(App& app, HWND hwnd, int index) {
             app.tabs[index].editMode = false;
             app.tabs[index].editorText.clear();
         }
-        int next = index + 1 < (int)app.tabs.size() ? index + 1 : index - 1;
-        // Activate first (so state lands in the surviving tab), then drop
-        tabActivate(app, hwnd, next);
+        // A deleted neighbor can refuse activation when retention is off.
+        // Only erase the active tab after a surviving document took ownership.
+        const int count = (int)app.tabs.size();
+        for (int offset = 1; offset < count && app.activeTab == index; ++offset) {
+            if (index + offset < count) tabActivate(app, hwnd, index + offset);
+            if (app.activeTab == index && index - offset >= 0)
+                tabActivate(app, hwnd, index - offset);
+        }
+        if (app.activeTab == index) {
+            // Keep unavailable tabs intact; replace the closed document with
+            // a launcher so no stale document or out-of-range index survives.
+            tabBecomeStartPage(app, hwnd);
+            return;
+        }
         int erase = index;
         app.tabs.erase(app.tabs.begin() + erase);
         if (app.activeTab > erase) app.activeTab--;
