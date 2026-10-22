@@ -79,3 +79,44 @@ confirmation also requires the requested tab to be active.
 After the fix, tinta and input_tests built in MSVC x64 Release and all nine
 checks listed under integration passed, including deleted_tab. Existing
 active/inactive retention, recovery Save As and settings checks still run.
+
+## Audit of failed activation callers (#275)
+
+A follow-up native audit reproduced four further failed-activation errors
+before correction: history applied the unavailable tab's scroll to the live
+document, a missing tab armed a drag, the transfer receiver acknowledged a
+path it did not activate, and draft recovery edited the wrong live tab.
+Forward/reverse tab cycling also failed to get past an unavailable neighbor;
+new native assertions reproduced both directions before correction.
+
+Corrections and coverage:
+
+- History and draft recovery require the requested tab to have activated.
+  A draft for an unavailable tab opens separately without changing a live tab.
+- Clicking an unavailable tab cannot arm a drag. Normal and drag-out closure
+  share the same guarded neighbor selection.
+- A bulk-close sweep stops if a launcher replacement did not shrink the tab
+  list, preventing repeated closure when the kept tab is unavailable.
+- Path-only transfers reject unreadable/missing paths and acknowledge only
+  activation of the requested document. Cached missing documents cannot tear
+  off; users must save them first. Deletion between arming and releasing a
+  drag cancels the transfer without removing the source tab.
+- Ctrl+Tab and reverse cycling skip unavailable neighbors.
+- Native tests exercise the actual tear-off launch probe beside two missing
+  neighbors, cached missing documents, deletion during a drag, bulk close,
+  history, draft recovery, and failed tab clicks.
+
+The expanded search_input_focus check originally blocked in the intentional
+Save As dialog because it fabricated a nonexistent normal-save path. Its
+fixture setup now creates an existing destination; this keeps its focus
+assertions intact. The modal recovery behavior is separately checked by
+SavePickerProbe. Its wrapper now has a 30-second timeout.
+
+After the audit changes, MSVC x64 Release builds of tinta and input_tests
+passed 15 checks: editor_features, ui_font_language, editor_context_selection,
+file_fragment_navigation, wrapped_cursor_navigation, search_input_focus,
+input_shortcuts, table_and_modifier_input, docked_preview_and_hints,
+wide_table_layout, window_drag_and_title_space, tab_drop_position, deleted_tab,
+tab_hover_card and search_results_panel. This was a targeted regression run,
+not the complete repository suite. The upstream CRLF scroll-sync limitation
+recorded above is unchanged and that check was not rerun in this audit.

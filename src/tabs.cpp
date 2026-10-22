@@ -335,9 +335,14 @@ void tabCloseIndex(App& app, HWND hwnd, int index) {
 void tabCycle(App& app, HWND hwnd, int direction) {
     tabsInit(app);
     if (app.tabs.size() < 2) return;
-    int count = (int)app.tabs.size();
-    int next = (app.activeTab + direction + count) % count;
-    tabActivate(app, hwnd, next);
+    const int count = (int)app.tabs.size();
+    const int start = app.activeTab;
+    const int step = direction < 0 ? -1 : 1;
+    for (int offset = 1; offset < count; ++offset) {
+        const int next = (start + step * offset + count) % count;
+        tabActivate(app, hwnd, next);
+        if (app.activeTab != start) return;
+    }
 }
 
 // The lone surviving tab turns into the start page in place: closing
@@ -509,6 +514,7 @@ bool tabReceiveCopyData(App& app, HWND hwnd, const COPYDATASTRUCT& data) {
     const char* path = bytes + prefix;
     const size_t length = data.cbData - prefix - 1;
     if (path[length] != '\0' || std::memchr(path, '\0', length)) return false;
+    if (!std::ifstream(toWide(std::string(path, length)))) return false;
     int index = -1;
     if (data.dwData == 2) {
         POINT point;
@@ -517,10 +523,14 @@ bool tabReceiveCopyData(App& app, HWND hwnd, const COPYDATASTRUCT& data) {
         index = tabDropInsertionIndex(app, point);
     }
     tabOpenPath(app, hwnd, std::string(path, length), true, index);
-    return true;
+    return app.activeTab >= 0 && app.activeTab < (int)app.tabs.size() &&
+           _stricmp(app.currentFile.c_str(), path) == 0;
 }
 
 bool tabSendDrop(HWND target, const std::string& utf8Path, POINT screenPoint) {
+    // This protocol transfers paths, not cached content. Keep recovery tabs
+    // in their source window until the user saves them to an existing file.
+    if (!std::ifstream(toWide(utf8Path))) return false;
     std::string payload(sizeof(screenPoint), '\0');
     std::memcpy(payload.data(), &screenPoint, sizeof(screenPoint));
     payload += utf8Path;
@@ -1496,6 +1506,7 @@ bool tabStripMouseDown(App& app, HWND hwnd, int x, int y, bool middle) {
             return true;
         }
         tabActivate(app, hwnd, hit.index);
+        if (app.activeTab != hit.index) return true;
         // Arm a potential drag: moving past the threshold starts
         // reordering, pulling away from the strip detaches the tab
         app.tabDragIndex = hit.index;
@@ -1626,8 +1637,15 @@ void tabBulkCloseStep(App& app, HWND hwnd) {
             InvalidateRect(hwnd, nullptr, FALSE);
             return;
         }
+        const size_t before = app.tabs.size();
         tabCloseIndex(app, hwnd, victim);
         if (app.confirmExitPending) return;  // waiting on the dialog
+        if (app.tabs.size() >= before) {
+            // A missing kept tab may leave a replacement launcher instead
+            // of removing the victim. Do not repeatedly close that launcher.
+            app.tabBulkCloseMode = 0;
+            return;
+        }
     }
 }
 
@@ -1927,13 +1945,9 @@ void dragCloseLocal(App& app, HWND hwnd, int index) {
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return;
     }
-    if (index == app.activeTab) {
-        int next = index + 1 < (int)app.tabs.size() ? index + 1 : index - 1;
-        tabActivate(app, hwnd, next);
-    }
-    app.tabs.erase(app.tabs.begin() + index);
-    if (app.activeTab > index) app.activeTab--;
-    app.hoveredTab = -1;
+    // A transferred tab is clean; use the same guarded neighbor selection
+    // and launcher fallback as a normal close.
+    tabCloseIndex(app, hwnd, index);
 }
 
 }  // namespace
@@ -1959,7 +1973,7 @@ void tabDragMove(App& app, HWND hwnd, int x, int y) {
                         : (app.tabs[index].editMode &&
                            app.tabs[index].editorDirty);
     const std::string& path = active ? app.currentFile : app.tabs[index].path;
-    bool detachable = !dirty && !path.empty();
+    bool detachable = !dirty && !path.empty() && std::ifstream(toWide(path)).good();
 
     // Clear of the strip: the tab floats as a ghost card until release
     float stripH = chromeTopHeight(app);
@@ -2021,6 +2035,11 @@ void tabDragEnd(App& app, HWND hwnd, int x, int y) {
             active ? app.currentFile : app.tabs[index].path;
         POINT screen = {x, y};
         ClientToScreen(hwnd, &screen);
+        // The file may have disappeared after the drag was armed.
+        if (!std::ifstream(toWide(path))) {
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return;
+        }
 
         // Dropped onto another Tinta window: the tab moves there
         HWND under = WindowFromPoint(screen);

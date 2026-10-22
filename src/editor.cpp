@@ -1609,6 +1609,7 @@ void enterRecoveredDraft(App& app, HWND hwnd, const std::string& content,
                                       : (app.tabs[i].editMode && app.tabs[i].editorDirty);
             if (dirty || _stricmp(path.c_str(), origPath.c_str()) != 0) continue;
             tabActivate(app, hwnd, (int)i);
+            if (app.activeTab != (int)i) continue;
             enterEditModeWithContent(app, content);
             app.editorDirty = true;
             updateWindowTitle(app);

@@ -2539,6 +2539,7 @@ static bool navOpenEntry(App& app, HWND hwnd, const App::NavEntry& entry) {
                 (int)i == app.activeTab ? app.currentFile : app.tabs[i].path;
             if (_stricmp(existing.c_str(), entry.path.c_str()) == 0) {
                 tabActivate(app, hwnd, (int)i);
+                if (app.activeTab != (int)i) return false;
                 found = true;
                 break;
             }

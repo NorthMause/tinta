@@ -30,3 +30,14 @@ two tabs, delete the inactive copy from disk, then close the active tab.
 Tinta must show its start page with a valid active tab; it must not show the
 closed document under the missing tab's name. Repeat with the tab order
 reversed. If a third readable tab exists, it must be selected instead.
+
+## Other actions after deletion
+
+With retention off, try history navigation and clicking/dragging the missing
+tab: neither must act on the live document under the missing file's identity.
+Recover a draft for the missing path: the live tab must remain unchanged.
+Use Close Others on a missing tab: the sweep must stop safely, without hanging.
+With retention on, save a missing document before dragging it to another window;
+path-only transfers must never discard its only in-memory copy.
+
+Ctrl+Tab and reverse cycling must skip unavailable tabs when another readable tab exists.

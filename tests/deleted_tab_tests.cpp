@@ -298,6 +298,15 @@ int runDeletedTabTests() {
         tabActivate(closingApp, closingApp.hwnd, active);
         if (scenario == 0 || scenario == 3) fs::remove(first);
         if (scenario != 0) fs::remove(second);
+        if (scenario == 2) {
+            tabCycle(closingApp, closingApp.hwnd, 1);
+            check(closingApp.activeTab == 2 && closingApp.currentFile == toUtf8(third.wstring()),
+                  "forward tab cycling skips an unavailable neighbor");
+            tabCycle(closingApp, closingApp.hwnd, -1);
+            check(closingApp.activeTab == 0 && closingApp.currentFile == toUtf8(first.wstring()),
+                  "backward tab cycling skips an unavailable neighbor");
+            tabActivate(closingApp, closingApp.hwnd, active);
+        }
         tabCloseIndex(closingApp, closingApp.hwnd, active);
         const bool valid = closingApp.activeTab >= 0 &&
             closingApp.activeTab < (int)closingApp.tabs.size();
@@ -319,6 +328,59 @@ int runDeletedTabTests() {
             }
         }
         DestroyWindow(closingApp.hwnd);
+    }
+    {
+        const auto missing = dir / "audit-missing.md";
+        const auto live = dir / "audit-live.md";
+        std::ofstream(live, std::ios::binary) << source;
+        auto auditState = std::make_unique<App>();
+        App& audit = *auditState;
+        audit.hwnd = CreateWindowExW(0, L"STATIC", L"Unavailable activation audit", WS_POPUP,
+            0, 0, 1050, 900, nullptr, nullptr, nullptr, nullptr);
+        if (!audit.hwnd || !initD2D(audit) || !createRenderTarget(audit)) return 1;
+        audit.width = 1050; audit.height = 900;
+        applyTheme(audit, 0);
+        auto reset = [&] {
+            if (audit.editMode) { audit.editorDirty = false; exitEditMode(audit); }
+            std::ofstream(missing, std::ios::binary) << source;
+            openDocumentInViewer(audit, live.wstring());
+            tabsSeedSession(audit, {toUtf8(missing.wstring()), toUtf8(live.wstring())});
+            fs::remove(missing);
+        };
+        reset();
+        audit.navBack = {{toUtf8(missing.wstring()), 12345.0f}};
+        audit.navForward.clear();
+        audit.pendingScrollRestore = -1;
+        navigateBack(audit, audit.hwnd);
+        check(audit.currentFile == toUtf8(live.wstring()) && audit.navForward.empty() &&
+              audit.pendingScrollRestore != 12345.0f,
+              "history rejects a missing tab without applying its scroll to another document");
+        audit.renderTarget->BeginDraw(); renderTabStrip(audit); audit.renderTarget->EndDraw();
+        for (const auto& hit : audit.tabHits) if (hit.index == 0) {
+            const int x = (int)hit.rect.left + 10;
+            const int y = (int)((hit.rect.top + hit.rect.bottom) / 2);
+            tabStripMouseDown(audit, audit.hwnd, x, y, false);
+            check(audit.tabDragIndex == -1 && audit.activeTab == 1,
+                  "an unavailable tab cannot arm a drag of another document");
+            tabDragCancel(audit, audit.hwnd);
+            break;
+        }
+        const std::string missingPath = toUtf8(missing.wstring());
+        COPYDATASTRUCT unavailable{1, (DWORD)missingPath.size() + 1, (void*)missingPath.c_str()};
+        check(!tabReceiveCopyData(audit, audit.hwnd, unavailable) && audit.activeTab == 1,
+              "a receiver does not acknowledge a missing file it could not activate");
+        enterRecoveredDraft(audit, audit.hwnd, "# Recovered draft", missingPath);
+        check(audit.currentFile == missingPath && audit.editorDirty &&
+              audit.editorText == L"# Recovered draft" && audit.tabs[1].path == toUtf8(live.wstring()),
+              "recovering a missing-file draft never replaces a different live document");
+        reset();
+        audit.tabBulkCloseMode = 1;
+        audit.tabBulkKeepId = audit.tabs[0].id;
+        tabBulkCloseStep(audit, audit.hwnd);
+        check(audit.tabBulkCloseMode == 0 && audit.activeTab >= 0 &&
+              audit.activeTab < (int)audit.tabs.size() && audit.currentFile.empty(),
+              "Close Others with an unavailable kept tab stops safely on the launcher");
+        DestroyWindow(audit.hwnd);
     }
     DestroyWindow(app.hwnd);
     std::cout << "Deleted tabs: " << failures << " failures\n";
