@@ -1,3 +1,25 @@
+# Tinta 3.9.0 — Russian UI and deleted-file recovery
+
+This is NorthMause's custom fork of [Tinta](https://github.com/oipoistar/tinta),
+based on upstream 3.9.0, with both additions included:
+
+- **Russian interface:** choose **Русский** in Settings → General → Language.
+- **Deleted-file recovery:** enable **Keep deleted files in memory** in General.
+  It is off by default and increases RAM usage. Cached content lasts until
+  its tab or Tinta closes. When the original is missing, Save / Ctrl+S opens
+  **Save As**; cancelling keeps the text available.
+
+The combined version is on branch `codex/tinta-custom-3.9.0`.
+The contributions are also offered separately upstream in
+[PR #274](https://github.com/oipoistar/tinta/pull/274) and
+[PR #275](https://github.com/oipoistar/tinta/pull/275).
+
+The Microsoft Store and upstream download links below refer to the original
+project and do not provide this custom build. See [CUSTOM-BUILD.md](CUSTOM-BUILD.md)
+for this build's scope and local launch instructions.
+
+---
+
 <div align="center">
   <img src="resources/tinta.ico" width="80">
   <h1>Tinta</h1>

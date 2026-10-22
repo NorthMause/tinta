@@ -594,7 +594,7 @@ static void openThemesIniFile() {
 static void openThemeEditor(App& app, bool editCurrent) {
     enumerateSystemFontFamilies(app);
     themeEditorAdoptBase(app, app.currentThemeIndex);
-    app.themeEditorName = editCurrent ? app.theme.name : L"My theme";
+    app.themeEditorName = editCurrent ? app.theme.name : tr(app, "theme.editor.default_name");
     app.themeEditorField = 14;  // name focused first
     app.themeEditorFontScroll = 0.0f;
     app.themeEditorColorScroll = 0.0f;
@@ -2927,7 +2927,7 @@ void handleMouseUp(App& app, HWND hwnd, WPARAM, LPARAM lParam) {
                 return;
             } else if (action == TE_SAVE) {
                 std::wstring name = app.themeEditorName.empty()
-                    ? L"My theme" : app.themeEditorName;
+                    ? tr(app, "theme.editor.default_name") : app.themeEditorName;
                 // The heading and code faces start from the base theme's,
                 // so deriving from Abyss keeps its pinned heading face
                 int idx = saveCustomTheme(app.themeEditorTheme, name, app.themeEditorFont,

@@ -105,6 +105,11 @@ int runDeletedTabTests() {
     std::ofstream(empty).close();
     auto state = std::make_unique<App>();
     App& app = *state;
+    // This custom branch validates retained tabs with the Russian UI active.
+    app.currentLanguageIndex = languageIndexById("ru");
+    app.languageSetting = app.currentLanguageIndex;
+    check(std::wstring(tr(app, "settings.keep_deleted_tabs")) != L"Keep deleted files in memory",
+          "deleted-tab retention has its Russian UI translation");
     check(!app.keepDeletedTabs && !loadSettings().keepDeletedTabs,
           "retaining deleted files is off by default");
     app.hwnd = CreateWindowExW(0, L"STATIC", L"Deleted tab test", WS_POPUP,

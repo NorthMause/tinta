@@ -2889,12 +2889,10 @@ void renderSettingsOverlay(App& app) {
         cy += rowCardH + cardGap;
         // One card for the three hand-editable ini files (was three rows)
         card(rowCardH);
-        float filesW = chipsWidth({L"settings.ini", L"themes.ini", L"languages.ini"});
-        cardLabel(tr(app, "settings.config_files"), tr(app, "settings.config_files.hint"),
-                  filesW + dpi(app, 10.0f));
+        cardLabel(tr(app, "settings.config_files"), nullptr);
         {
-            float bx = cx + cw - cardPad - filesW;
-            float chipY = cy + (rowCardH - dpi(app, 24.0f)) * 0.5f;
+            float bx = cx + cardPad;
+            float chipY = cy + dpi(app, 28.0f);
             settingsChip(app, bx, chipY, L"settings.ini", false, SET_OPEN_INI, anim, fmt);
             settingsChip(app, bx, chipY, L"themes.ini", false, SET_OPEN_THEMES_INI, anim, fmt);
             settingsChip(app, bx, chipY, L"languages.ini", false, SET_OPEN_LANGS_INI, anim, fmt);
