@@ -16,6 +16,7 @@
 #include <dlgs.h>
 
 #include "settings_preview.h"
+#include "startpage.h"
 
 namespace {
 // Exercise the real modal file picker in this test's UI thread only.
@@ -276,6 +277,116 @@ int runDeletedTabTests() {
     check(folderSave.shown == 1 && folderSave.suggestedName == L"Gone.md" &&
           !app.editorDirty && read(folderCopy) == source && !fs::exists(removedFolder),
           "a deleted parent folder also requires Save As and is never recreated silently");
+    // Closing must handle a neighbor that cannot be activated with retention off.
+    // Use fresh native app states so an invalid index is reported before any
+    // later operation could accidentally index the broken tab list.
+    for (int scenario = 0; scenario < 4; ++scenario) {
+        const auto closeDir = dir / ("close-missing-" + std::to_string(scenario));
+        fs::create_directories(closeDir);
+        const auto first = closeDir / "First.md";
+        const auto second = closeDir / "Second.md";
+        const auto third = closeDir / "Third.md";
+        for (const auto& path : {first, second, third})
+            std::ofstream(path, std::ios::binary) << source;
+        auto closeState = std::make_unique<App>();
+        App& closingApp = *closeState;
+        closingApp.hwnd = CreateWindowExW(0, L"STATIC", L"Close missing tab test", WS_POPUP,
+            0, 0, 1000, 800, nullptr, nullptr, nullptr, nullptr);
+        if (!closingApp.hwnd || !initD2D(closingApp) || !createRenderTarget(closingApp)) return 1;
+        applyTheme(closingApp, 0);
+        check(!closingApp.keepDeletedTabs, "close regression uses default disabled retention");
+        openDocumentInViewer(closingApp, first.wstring());
+        tabsInit(closingApp);
+        tabOpenPath(closingApp, closingApp.hwnd, toUtf8(second.wstring()), false);
+        if (scenario >= 2) tabOpenPath(closingApp, closingApp.hwnd, toUtf8(third.wstring()), false);
+        const int active = scenario == 0 ? 1 : scenario == 3 ? 2 : 0;
+        tabActivate(closingApp, closingApp.hwnd, active);
+        if (scenario == 0 || scenario == 3) fs::remove(first);
+        if (scenario != 0) fs::remove(second);
+        if (scenario == 2) {
+            tabCycle(closingApp, closingApp.hwnd, 1);
+            check(closingApp.activeTab == 2 && closingApp.currentFile == toUtf8(third.wstring()),
+                  "forward tab cycling skips an unavailable neighbor");
+            tabCycle(closingApp, closingApp.hwnd, -1);
+            check(closingApp.activeTab == 0 && closingApp.currentFile == toUtf8(first.wstring()),
+                  "backward tab cycling skips an unavailable neighbor");
+            tabActivate(closingApp, closingApp.hwnd, active);
+        }
+        tabCloseIndex(closingApp, closingApp.hwnd, active);
+        const bool valid = closingApp.activeTab >= 0 &&
+            closingApp.activeTab < (int)closingApp.tabs.size();
+        check(valid, "closing beside deleted tabs leaves a valid active index");
+        if (valid) {
+            const auto& selected = closingApp.tabs[closingApp.activeTab];
+            check(selected.path == closingApp.currentFile,
+                  "the surviving tab stays attached to its own document");
+            if (scenario >= 2 && scenario != 3) {
+                check(closingApp.tabs.size() == 2 && closingApp.currentFile == toUtf8(third.wstring()) &&
+                      closingApp.sourceText == source,
+                      "closing skips the missing neighbor and selects another available tab");
+            } else {
+                check(closingApp.currentFile.empty() && selected.path.empty() &&
+                      closingApp.sourceText.empty() && !closingApp.editMode && startPageActive(closingApp),
+                      "when every other tab is missing closing lands on the start page");
+                check(closingApp.tabs.size() == (scenario == 3 ? 3u : 2u),
+                      "unavailable tabs are retained beside the replacement start page");
+            }
+        }
+        DestroyWindow(closingApp.hwnd);
+    }
+    {
+        const auto missing = dir / "audit-missing.md";
+        const auto live = dir / "audit-live.md";
+        std::ofstream(live, std::ios::binary) << source;
+        auto auditState = std::make_unique<App>();
+        App& audit = *auditState;
+        audit.hwnd = CreateWindowExW(0, L"STATIC", L"Unavailable activation audit", WS_POPUP,
+            0, 0, 1050, 900, nullptr, nullptr, nullptr, nullptr);
+        if (!audit.hwnd || !initD2D(audit) || !createRenderTarget(audit)) return 1;
+        audit.width = 1050; audit.height = 900;
+        applyTheme(audit, 0);
+        auto reset = [&] {
+            if (audit.editMode) { audit.editorDirty = false; exitEditMode(audit); }
+            std::ofstream(missing, std::ios::binary) << source;
+            openDocumentInViewer(audit, live.wstring());
+            tabsSeedSession(audit, {toUtf8(missing.wstring()), toUtf8(live.wstring())});
+            fs::remove(missing);
+        };
+        reset();
+        audit.navBack = {{toUtf8(missing.wstring()), 12345.0f}};
+        audit.navForward.clear();
+        audit.pendingScrollRestore = -1;
+        navigateBack(audit, audit.hwnd);
+        check(audit.currentFile == toUtf8(live.wstring()) && audit.navForward.empty() &&
+              audit.pendingScrollRestore != 12345.0f,
+              "history rejects a missing tab without applying its scroll to another document");
+        audit.renderTarget->BeginDraw(); renderTabStrip(audit); audit.renderTarget->EndDraw();
+        for (const auto& hit : audit.tabHits) if (hit.index == 0) {
+            const int x = (int)hit.rect.left + 10;
+            const int y = (int)((hit.rect.top + hit.rect.bottom) / 2);
+            tabStripMouseDown(audit, audit.hwnd, x, y, false);
+            check(audit.tabDragIndex == -1 && audit.activeTab == 1,
+                  "an unavailable tab cannot arm a drag of another document");
+            tabDragCancel(audit, audit.hwnd);
+            break;
+        }
+        const std::string missingPath = toUtf8(missing.wstring());
+        COPYDATASTRUCT unavailable{1, (DWORD)missingPath.size() + 1, (void*)missingPath.c_str()};
+        check(!tabReceiveCopyData(audit, audit.hwnd, unavailable) && audit.activeTab == 1,
+              "a receiver does not acknowledge a missing file it could not activate");
+        enterRecoveredDraft(audit, audit.hwnd, "# Recovered draft", missingPath);
+        check(audit.currentFile == missingPath && audit.editorDirty &&
+              audit.editorText == L"# Recovered draft" && audit.tabs[1].path == toUtf8(live.wstring()),
+              "recovering a missing-file draft never replaces a different live document");
+        reset();
+        audit.tabBulkCloseMode = 1;
+        audit.tabBulkKeepId = audit.tabs[0].id;
+        tabBulkCloseStep(audit, audit.hwnd);
+        check(audit.tabBulkCloseMode == 0 && audit.activeTab >= 0 &&
+              audit.activeTab < (int)audit.tabs.size() && audit.currentFile.empty(),
+              "Close Others with an unavailable kept tab stops safely on the launcher");
+        DestroyWindow(audit.hwnd);
+    }
     DestroyWindow(app.hwnd);
     std::cout << "Deleted tabs: " << failures << " failures\n";
     return failures ? 1 : 0;

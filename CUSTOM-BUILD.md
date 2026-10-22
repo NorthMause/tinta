@@ -18,6 +18,8 @@ cache. Close a tab or Tinta and its retained source is released.
 If the original is deleted, Save / Ctrl+S opens Save As with the previous name
 suggested. Confirm a destination to save, or cancel to keep editing.
 Files that disappeared before being read cannot be recovered by this option.
+A retained deleted tab must be saved before moving it into another window:
+window-to-window transfers carry a file path, not the in-memory copy.
 
 ## Validation
 

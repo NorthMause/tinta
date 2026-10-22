@@ -26,3 +26,19 @@ branches, on codex/tinta-custom-3.9.0. Neither PR branch is modified.
 
 Screenshots, executables and portable packages are ignored build/output artifacts.
 The product version remains 3.9.0; the README and package identify this custom fork.
+
+## Follow-up tab-state audit
+
+Merged #275 fixes 7125492 and 8762573 into this custom branch without conflicts.
+Rebuilt tinta, input_tests, i18n_tests and russian_ui_tests in x64 Release.
+Seventeen targeted CTest checks passed: the eleven above plus
+editor_context_selection, search_input_focus, table_and_modifier_input,
+docked_preview_and_hints, wide_table_layout and window_drag_and_title_space.
+Translation validation still passes all 357 keys. The native deleted-tab test
+retains this branch's Russian UI setup. Regression coverage now includes
+unavailable neighbors when closing or tearing off a tab, bulk close, failed
+activation in history and draft recovery, failed tab drags, path transfer
+acknowledgements, deletion during a drag, and cycling past unavailable tabs.
+See deleted-tab-validation.md for reproduction and limitations. This was a
+targeted run, not the complete repository suite.
+The portable executable and ZIP in out/ were rebuilt from the corrected source.
